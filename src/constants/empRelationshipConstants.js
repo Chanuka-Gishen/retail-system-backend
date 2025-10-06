@@ -1,0 +1,5 @@
+export const EMP_RELATION_FAMILY = 'Family'
+export const EMP_RELATION_SPOUSE = 'Spouse'
+export const EMP_RELATION_CHILDREN = 'Child'
+export const EMP_RELATION_RELATIVE = 'Relative'
+export const EMP_RELATION_OTHER = 'Other'
