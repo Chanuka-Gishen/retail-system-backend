@@ -38,6 +38,8 @@ import {
 } from "../constants/constants.js";
 import workOrderModel from "../models/workorderModel.js";
 import notificationModel from "../models/notificationModel.js";
+import invoiceModel from "../models/invoiceModel.js";
+import { INV_CUS_TYP_GUEST } from "../constants/invoiceConstants.js";
 
 // Register customer - admin
 export const registerCustomerController = async (req, res) => {
@@ -56,10 +58,6 @@ export const registerCustomerController = async (req, res) => {
       customerMobile,
       customerSecondaryMobile,
       customerEmail,
-      vehicleNumber,
-      vehicleManufacturer,
-      vehicleModel,
-      vehicleType,
     } = value;
 
     const isExistCustomer = await customerModel.findOne({ customerMobile });
@@ -68,23 +66,6 @@ export const registerCustomerController = async (req, res) => {
       return res
         .status(httpStatus.BAD_REQUEST)
         .json(ApiResponse.error(info_code, existing_customer));
-    }
-
-    const formattedVehicleNumber = formatText(vehicleNumber);
-
-    const isExistingVehicle = await customerVehicleModel
-      .findOne({ formattedVehicleNumber })
-      .populate("vehicleOwner");
-
-    if (isExistingVehicle) {
-      return res
-        .status(httpStatus.BAD_REQUEST)
-        .json(
-          ApiResponse.error(
-            info_code,
-            existing_vehicle + isExistingVehicle.vehicleOwner.customerName
-          )
-        );
     }
 
     const newCustomer = new customerModel({
@@ -99,16 +80,6 @@ export const registerCustomerController = async (req, res) => {
     });
 
     const savedCustomer = await newCustomer.save();
-
-    const newVehicle = new customerVehicleModel({
-      vehicleOwner: savedCustomer._id,
-      vehicleManufacturer,
-      vehicleModel,
-      vehicleNumber: formattedVehicleNumber,
-      vehicleType,
-    });
-
-    await newVehicle.save();
 
     return res
       .status(httpStatus.OK)
@@ -189,7 +160,6 @@ export const getAllCustomersController = async (req, res) => {
     const customerName = req.query.name;
     const customerMobile = req.query.mobile;
     const customerSecMobile = req.query.secMobile;
-    const filteredVehicleNumber = req.query.vehicleNumber;
 
     const query = {};
 
@@ -214,72 +184,18 @@ export const getAllCustomersController = async (req, res) => {
       };
     }
 
-    const data = await customerModel.aggregate([
-      {
-        $match: query,
-      },
-      {
-        $lookup: {
-          from: "vehicles",
-          localField: "_id",
-          foreignField: "vehicleOwner",
-          as: "customerVehicles",
-        },
-      },
-      {
-        $match: {
-          ...(isValidString(filteredVehicleNumber) && {
-            "customerVehicles.vehicleNumber": {
-              $regex: `${filteredVehicleNumber}`,
-              $options: "i",
-            },
-          }),
-        },
-      },
-      {
-        $sort: { createdAt: -1 },
-      },
-      {
-        $skip: skip,
-      },
-      {
-        $limit: limit,
-      },
-    ]);
+    const data = await customerModel
+      .find(query)
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
 
-    const totalCount = await customerModel.aggregate([
-      {
-        $match: query,
-      },
-      {
-        $lookup: {
-          from: "vehicles",
-          localField: "_id",
-          foreignField: "vehicleOwner",
-          as: "customerVehicles",
-        },
-      },
-      {
-        $match: {
-          ...(isValidString(filteredVehicleNumber) && {
-            "customerVehicles.vehicleNumber": {
-              $regex: filteredVehicleNumber,
-              $options: "i",
-            },
-          }),
-        },
-      },
-      {
-        $count: "totalCount",
-      },
-    ]);
-
-    const count = totalCount.length > 0 ? totalCount[0].totalCount : 0;
+    const totalCount = await customerModel.countDocuments(query);
 
     return res.status(httpStatus.OK).json(
       ApiResponse.response(success_code, success_message, {
         data,
-        count,
+        count: totalCount,
       })
     );
   } catch (error) {
@@ -294,19 +210,9 @@ export const getCustomerInfoController = async (req, res) => {
   try {
     const id = req.query.id;
 
-    const result = await customerModel.aggregate([
-      { $match: { _id: new ObjectId(id) } },
-      {
-        $lookup: {
-          from: "vehicles",
-          localField: "_id",
-          foreignField: "vehicleOwner",
-          as: "customerVehicles",
-        },
-      },
-    ]);
+    const result = await customerModel.findById(new ObjectId(id));
 
-    if (result.length === 0) {
+    if (!result) {
       return res
         .status(httpStatus.NOT_FOUND)
         .json(ApiResponse.error(error_code, customer_not_found));
@@ -314,7 +220,7 @@ export const getCustomerInfoController = async (req, res) => {
 
     return res
       .status(httpStatus.OK)
-      .json(ApiResponse.response(success_code, success_message, result[0]));
+      .json(ApiResponse.response(success_code, success_message, result));
   } catch (error) {
     return res
       .status(httpStatus.INTERNAL_SERVER_ERROR)
@@ -575,25 +481,14 @@ export const sendInvoiceBalanceRemainder = async (req, res) => {
   }
 };
 
-// Stats - Total Unique Customers Count
-export const getUniqueCustomersCountController = async (req, res) => {
+// Stats - Total Registered Customers Count
+export const getRegisteredCustomersCountController = async (req, res) => {
   try {
-    const result = await workOrderModel.aggregate([
-      {
-        $group: {
-          _id: "$workOrderCustomer",
-        },
-      },
-      {
-        $count: "count",
-      },
-    ]);
-
-    const count = result[0]?.count || 0;
+    const count = await customerModel.countDocuments();
 
     return res
       .status(httpStatus.OK)
-      .json(ApiResponse.response(success_code, success_message, count));
+      .json(ApiResponse.response(success_code, success_message, count || 0));
   } catch (error) {
     return res
       .status(httpStatus.INTERNAL_SERVER_ERROR)
@@ -601,27 +496,14 @@ export const getUniqueCustomersCountController = async (req, res) => {
   }
 };
 
-// Stats - Repeating Customers Count
-export const getRepeatingCustomersCountController = async (req, res) => {
+// Stats - Walk-In Customers Count
+export const getWalkinCustomersCountController = async (req, res) => {
   try {
-    const result = await workOrderModel.aggregate([
-      {
-        $group: {
-          _id: "$workOrderCustomer",
-          orderCount: { $sum: 1 },
-        },
-      },
-      {
-        $match: {
-          orderCount: { $gt: 1 },
-        },
-      },
-      {
-        $count: "count",
-      },
-    ]);
+    const result = await invoiceModel.countDocuments({
+      invoiceCustomerType: INV_CUS_TYP_GUEST,
+    });
 
-    const count = result[0]?.count || 0;
+    const count = result || 0;
 
     return res
       .status(httpStatus.OK)

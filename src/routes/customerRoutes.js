@@ -5,9 +5,9 @@ import {
   getCustomerInfoController,
   getCustomerSmsNotificationsController,
   getNewCustomersCountController,
-  getRepeatingCustomersCountController,
+  getWalkinCustomersCountController,
   getSmsNotitificationsController,
-  getUniqueCustomersCountController,
+  getRegisteredCustomersCountController,
   registerCustomerController,
   sendBulkSmsController,
   sendInvoiceBalanceRemainder,
@@ -29,11 +29,11 @@ customerRoutes.post("/supAuth/send-sms-bulk", sendBulkSmsController);
 customerRoutes.get("/supAuth/send-pay-remainder", sendInvoiceBalanceRemainder);
 customerRoutes.get(
   "/auth/stat-unique-customers",
-  getUniqueCustomersCountController
+  getRegisteredCustomersCountController
 );
 customerRoutes.get(
   "/auth/stat-repeating-customers",
-  getRepeatingCustomersCountController
+  getWalkinCustomersCountController
 );
 customerRoutes.get("/auth/stat-new-customers", getNewCustomersCountController);
 

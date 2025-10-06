@@ -37,23 +37,4 @@ export const customerSchema = Joi.object({
       "string.email": "Please enter a valid email address.",
     })
     .allow(null, ""),
-  vehicleNumber: Joi.string().required().messages({
-    "string.base": "Vehicle number should be a type of text.",
-    "any.required": "Vehicle number is required.",
-  }),
-  vehicleManufacturer: Joi.string().required().messages({
-    "string.base": "Vehicle manufacturer should be a type of text.",
-    "any.required": "Vehicle manufacturer is required.",
-  }),
-  vehicleModel: Joi.string().required().messages({
-    "string.base": "Vehicle model should be a type of text.",
-    "any.required": "Vehicle model is required.",
-  }),
-  vehicleType: Joi.string()
-    .valid(...VEHICLE_TYPES)
-    .required()
-    .messages({
-      "string.base": "Vehicle type should be a type of text.",
-      "any.required": "Vehicle type is required.",
-    }),
 });
