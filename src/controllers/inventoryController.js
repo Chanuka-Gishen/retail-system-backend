@@ -475,7 +475,11 @@ export const getAllInventoryItemsController = async (req, res) => {
       };
     }
 
-    const items = await inventoryModel.find(query).skip(skip).limit(limit).populate('itemCategory');
+    const items = await inventoryModel
+      .find(query)
+      .skip(skip)
+      .limit(limit)
+      .populate("itemCategory");
 
     const count = await inventoryModel.countDocuments(query);
 
@@ -497,7 +501,7 @@ export const getInventoryItemController = async (req, res) => {
   const _id = req.query.id;
 
   try {
-    const item = await inventoryModel.findById(_id).populate('itemCategory');
+    const item = await inventoryModel.findById(_id).populate("itemCategory");
 
     if (!item) {
       return res
@@ -516,12 +520,22 @@ export const getInventoryItemController = async (req, res) => {
 
 // Get items for select
 export const getInventoryItemSelectController = async (req, res) => {
+  const page = parseInt(req.query.page) || 0;
+  const limit = parseInt(req.query.limit) || 10;
+
+  const skip = page * limit;
+
   const itemName = req.query.name;
   const itemCode = req.query.code;
+  const itemCategory = req.query.category;
 
   const query = {
     itemStatus: { $ne: ITEM_STS_INACTIVE },
   };
+
+  if (mongoose.Types.ObjectId.isValid(itemCategory)) {
+    query.itemCategory = new ObjectId(itemCategory);
+  }
 
   if (isValidString(itemName)) {
     query.itemName = {
@@ -538,7 +552,7 @@ export const getInventoryItemSelectController = async (req, res) => {
   }
 
   try {
-    const items = await inventoryModel
+    const data = await inventoryModel
       .find(query)
       .select({
         _id: 1,
@@ -547,13 +561,20 @@ export const getInventoryItemSelectController = async (req, res) => {
         itemQuantity: 1,
         itemBuyingPrice: 1,
         itemSellingPrice: 1,
+        itemWholesalePrice: 1,
+        itemWholesaleThreshold: 1,
       })
       .sort({ itemName: 1 })
-      .limit(10);
+      .skip(skip)
+      .limit(limit);
+
+    const count = await inventoryModel.countDocuments(query);
 
     return res
       .status(httpStatus.OK)
-      .json(ApiResponse.response(success_code, success_message, items));
+      .json(
+        ApiResponse.response(success_code, success_message, { data, count })
+      );
   } catch (error) {
     return res
       .status(httpStatus.INTERNAL_SERVER_ERROR)

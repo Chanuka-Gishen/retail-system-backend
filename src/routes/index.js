@@ -11,6 +11,7 @@ import empRoutes from "./employeeRoutes.js";
 import supplierRoutes from "./supplierRoutes.js";
 import payrollRoutes from "./payrollRoutes.js";
 import bookingRoutes from "./bookingRoutes.js";
+import invoiceRoutes from "./invoiceRoutes.js";
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ router.use("/employee", empRoutes);
 router.use("/customer", customerRoutes);
 router.use("/vehicle", vehicleRoutes);
 router.use("/inventory", inventoryRoutes);
+router.use("/invoice", invoiceRoutes);
 router.use("/workorder", workOrderRoutes);
 router.use("/supplier", supplierRoutes);
 router.use("/payment", paymentRoutes);

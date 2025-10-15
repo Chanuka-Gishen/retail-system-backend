@@ -46,9 +46,18 @@ export const stock_paid_amount_incorrect =
   "Stock paid amount is greater than the total value";
 export const item_category_exists = " category already created.";
 export const item_category_not_found = "Category not found";
+export const item_insufficient_stock_quantity = "Insufficient stock for item: ";
 
 export const invoice_created_success = "Invoice created succesful";
 export const invoice_not_found = "Invoice not found";
+export const invoice_item_not_found = "Invoice item not found";
+export const invoice_cannot_edit = "Only open invoices can be edited";
+export const invoice_not_items_cannot_complete =
+  "Invoice has no items and cannot be completed";
+export const invoice_cannot_complete_not_open =
+  "Only open invoices can be completed";
+export const invoice_cannot_close_not_completed =
+  "Only completed invoices can be closed";
 
 export const wo_not_found = "Workorder not found";
 export const wo_invalid_status = "Invalid status";

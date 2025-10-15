@@ -1,6 +1,11 @@
 import mongoose from "mongoose";
 
-import { ITEM_STATUS } from "../constants/itemStatus.js";
+import {
+  ITEM_STATUS,
+  ITEM_STS_INSTOCK,
+  ITEM_STS_LOW_STOCK,
+  ITEM_STS_OUTOFSTOCK,
+} from "../constants/itemStatus.js";
 
 const Schema = mongoose.Schema;
 
@@ -31,6 +36,39 @@ const inventorySchema = new Schema(
   },
   { timestamps: true }
 );
+
+inventorySchema.pre("save", function (next) {
+  this.updateStatusBasedOnQuantity();
+  next();
+});
+
+inventorySchema.pre("findOneAndUpdate", function (next) {
+  this.updateStatusBasedOnQuantity();
+  next();
+});
+
+inventorySchema.pre("findByIdAndUpdate", function (next) {
+  this.updateStatusBasedOnQuantity();
+  next();
+});
+
+// Method to update status based on quantity
+inventorySchema.methods.updateStatusBasedOnQuantity = function () {
+  const quantity = this.itemQuantity || 0;
+  const threshold = this.itemThreshold || 0;
+
+  switch (quantity) {
+    case quantity === 0:
+      this.itemStatus = ITEM_STS_OUTOFSTOCK;
+      break;
+    case quantity <= threshold:
+      this.itemStatus = ITEM_STS_LOW_STOCK;
+      break;
+    default:
+      this.itemStatus = ITEM_STS_INSTOCK;
+      break;
+  }
+};
 
 const inventoryModel = mongoose.model("inventory", inventorySchema);
 

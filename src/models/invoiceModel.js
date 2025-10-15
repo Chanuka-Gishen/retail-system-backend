@@ -60,6 +60,7 @@ const invoiceSchema = new Schema(
       type: Number,
       required: true,
       min: 0,
+      default: 0,
     },
     invoiceGrossTotal: {
       type: Number,
