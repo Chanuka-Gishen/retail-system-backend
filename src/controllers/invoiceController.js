@@ -56,6 +56,7 @@ import {
   PAYMENT_TYPE_IN,
   PAYMENT_TYPE_OUT,
 } from "../constants/paymentTypes.js";
+import { PAY_STATUS } from "../constants/paymentStatus.js";
 
 // Create new invoice controller
 export const createInvoiceController = async (req, res) => {
@@ -432,7 +433,7 @@ export const deleteInvoiceItemController = async (req, res) => {
   }
 };
 
-// Get invoices - All
+// Get invoices - All Closed
 export const getInvoicesController = async (req, res) => {
   const page = parseInt(req.query.page) || 0;
   const limit = parseInt(req.query.limit) || 30;
@@ -441,11 +442,18 @@ export const getInvoicesController = async (req, res) => {
 
   const invoiceNumber = req.query.number;
   const customerType = req.query.type;
+  const payStatus = req.query.status;
+  const customerName = req.query.name;
+  const customerMobile = req.query.mobile;
 
   const query = { invoiceStatus: WO_STATUS_CLOSED };
 
   if (INV_CUSTOMER_TYPES.includes(customerType)) {
     query.invoiceCustomerType = customerType;
+  }
+
+  if (PAY_STATUS.includes(payStatus)) {
+    query.invoicePaymentStatus = payStatus;
   }
 
   if (isValidString(invoiceNumber)) {
@@ -456,13 +464,93 @@ export const getInvoicesController = async (req, res) => {
   }
 
   try {
-    const data = await invoiceModel
-      .find(query)
-      .skip(skip)
-      .limit(limit)
-      .populate({ path: "invoiceCustomer", strictPopulate: false });
+    const data = await invoiceModel.aggregate([
+      {
+        $match: query,
+      },
+      {
+        $lookup: {
+          from: "customers",
+          as: "customer",
+          let: { customerId: "$invoiceCustomer" }, // Define variables
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", "$$customerId"] }, // Match unit ID
+                ...(isValidString(customerName) && {
+                  customerName: {
+                    $regex: `^${customerName}`,
+                    $options: "i",
+                  },
+                }),
+                ...(isValidString(customerMobile) && {
+                  customerMobile: {
+                    $regex: `^${customerMobile}`,
+                    $options: "i",
+                  },
+                }),
+              },
+            },
+          ],
+        },
+      },
+      {
+        $unwind: {
+          path: "$customer",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $sort: { createdAt: -1 },
+      },
+      {
+        $skip: skip,
+      },
+      {
+        $limit: limit,
+      },
+    ]);
 
-    const count = await invoiceModel.countDocuments(query);
+    const countResult = await invoiceModel.aggregate([
+      {
+        $match: query,
+      },
+      {
+        $lookup: {
+          from: "customers",
+          as: "customer",
+          let: { customerId: "$invoiceCustomer" }, // Define variables
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", "$$customerId"] }, // Match unit ID
+                ...(isValidString(customerName) && {
+                  customerName: {
+                    $regex: `^${customerName}`,
+                    $options: "i",
+                  },
+                }),
+                ...(isValidString(customerMobile) && {
+                  customerMobile: {
+                    $regex: `^${customerMobile}`,
+                    $options: "i",
+                  },
+                }),
+              },
+            },
+          ],
+        },
+      },
+      {
+        $unwind: {
+          path: "$customer",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      { $count: "total" },
+    ]);
+
+    const count = countResult[0]?.total || 0;
 
     return res
       .status(httpStatus.OK)
