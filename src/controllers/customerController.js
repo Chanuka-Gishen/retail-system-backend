@@ -228,6 +228,24 @@ export const getCustomerInfoController = async (req, res) => {
   }
 };
 
+// Get customers for selection {_id, customerName, customerMobile}
+export const getCustomersForSelectionController = async (req, res) => {
+  try {
+    const result = await customerModel
+      .find()
+      .select("_id customerName customerMobile")
+      .lean();
+
+    return res
+      .status(httpStatus.OK)
+      .json(ApiResponse.response(success_code, success_message, result));
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
 // Get all sms notifications
 export const getSmsNotitificationsController = async (req, res) => {
   const page = parseInt(req.query.page);

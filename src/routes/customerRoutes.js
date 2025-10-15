@@ -12,6 +12,7 @@ import {
   sendBulkSmsController,
   sendInvoiceBalanceRemainder,
   updateCustomerController,
+  getCustomersForSelectionController,
 } from "../controllers/customerController.js";
 
 const customerRoutes = express.Router();
@@ -20,6 +21,7 @@ customerRoutes.post("/auth/register", registerCustomerController);
 customerRoutes.put("/supAuth/update", updateCustomerController);
 customerRoutes.get("/auth/customers", getAllCustomersController);
 customerRoutes.get("/auth/customer", getCustomerInfoController);
+customerRoutes.get("/auth/selection", getCustomersForSelectionController);
 customerRoutes.get("/auth/notification-logs", getSmsNotitificationsController);
 customerRoutes.get(
   "/auth/customer-notification-logs",

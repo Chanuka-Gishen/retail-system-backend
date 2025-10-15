@@ -471,7 +471,6 @@ export const sendVerificationPinController = async (req, res) => {
     await bookingVerificationModel.create({
       mobileNumber: formattedMobileNo,
       pin,
-      expiresAt: fifteenMinutesLater,
     });
 
     return res
@@ -514,7 +513,6 @@ export const resendVerificationPinController = async (req, res) => {
     const newPinRecord = new bookingVerificationModel({
       mobileNumber: formattedMobileNo,
       pin,
-      expiresAt: fifteenMinutesLater,
       status: STATUS_PENDING,
     });
     await newPinRecord.save();
@@ -548,7 +546,6 @@ export const verifyBookingPinController = async (req, res) => {
       .findOne({
         mobileNumber: formattedMobileNo,
         status: STATUS_PENDING,
-        expiresAt: { $gt: new Date() },
       })
       .sort({ createdAt: -1 });
 

@@ -14,6 +14,7 @@ import {
   success_code,
 } from "../constants/statusCodes.js";
 import {
+  customer_not_found,
   invoice_cannot_close_not_completed,
   invoice_cannot_complete_not_open,
   invoice_cannot_edit,
@@ -49,6 +50,12 @@ import {
   generateInvoiceNumber,
   isValidString,
 } from "../services/commonServices.js";
+import { updateAccountData } from "./inventoryController.js";
+import { ACC_TYP_RECEIVABLES } from "../constants/accountTypes.js";
+import {
+  PAYMENT_TYPE_IN,
+  PAYMENT_TYPE_OUT,
+} from "../constants/paymentTypes.js";
 
 // Create new invoice controller
 export const createInvoiceController = async (req, res) => {
@@ -100,7 +107,13 @@ export const updateInvoiceController = async (req, res) => {
       .json(ApiResponse.error(error_code, error.message));
   }
 
-  const { _id, invoiceDiscountPercentage, invoiceDiscountCash } = value;
+  const {
+    _id,
+    invoiceCustomerType,
+    invoiceCustomer,
+    invoiceDiscountPercentage,
+    invoiceDiscountCash,
+  } = value;
 
   try {
     const invoice = await invoiceModel.findById(_id);
@@ -111,23 +124,9 @@ export const updateInvoiceController = async (req, res) => {
         .json(ApiResponse.error(error_code, invoice_not_found));
     }
 
-    const invoiceItems = await invoiceItemModel.find({
-      invoice: new ObjectId(invoice._id),
-    });
-
     // Calculate item-level totals
-    let invoiceSubTotal = 0;
-    let invoiceGrossTotal = 0;
-
-    // Calculate totals from items
-    for (const item of invoiceItems) {
-      const itemGrossPrice =
-        item.unitBuyingPrice * (item.quantity + item.exQuantity);
-      const itemNetPrice = item.unitPrice * (item.quantity + item.exQuantity);
-
-      invoiceSubTotal += itemNetPrice;
-      invoiceGrossTotal += itemGrossPrice;
-    }
+    const invoiceSubTotal = invoice.invoiceTotalAmount;
+    const invoiceGrossTotal = invoice.invoiceGrossTotal;
 
     // Calculate discounts
     const percentageDiscountAmount =
@@ -142,10 +141,26 @@ export const updateInvoiceController = async (req, res) => {
     const finalTotalAmount = Math.max(0, invoiceTotalAmount);
     const finalBalanceAmount = Math.max(0, invoiceBalanceAmount);
 
+    if (invoiceCustomerType === INV_CUS_TYP_REGISTERED && invoiceCustomer) {
+      const customer = await customerModel.findById(
+        new ObjectId(invoiceCustomer)
+      );
+
+      if (!customer) {
+        return res
+          .status(httpStatus.NOT_FOUND)
+          .json(ApiResponse.error(error_code, customer_not_found));
+      }
+
+      invoice.invoiceCustomer = new ObjectId(customer._id);
+    } else {
+      invoice.invoiceCustomer = null;
+    }
+
+    invoice.invoiceCustomerType = invoiceCustomerType;
     invoice.invoiceDiscountPercentage = invoiceDiscountPercentage;
     invoice.invoiceDiscountCash = invoiceDiscountCash;
     invoice.invoiceTotalDiscount = invoiceTotalDiscount;
-    invoice.invoiceTotalAmount = invoiceSubTotal;
     invoice.invoiceGrossTotal = invoiceGrossTotal;
     invoice.invoiceSubTotal = finalTotalAmount;
     invoice.invoiceBalanceAmount = finalBalanceAmount;
@@ -637,7 +652,13 @@ export const completeInvoiceController = async (req, res) => {
     invoice.invoiceSubTotal = subTotal;
     invoice.invoiceCompletedAt = new Date();
 
-    await invoice.save();
+    const savedInvoice = await invoice.save();
+
+    await updateAccountData(
+      ACC_TYP_RECEIVABLES,
+      PAYMENT_TYPE_IN,
+      savedInvoice.invoiceSubTotal
+    );
 
     return res
       .status(httpStatus.OK)

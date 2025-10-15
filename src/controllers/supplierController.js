@@ -29,7 +29,7 @@ import {
   PAYMENT_TYPE_IN,
   PAYMENT_TYPE_OUT,
 } from "../constants/paymentTypes.js";
-import { PAY_SC_RETURNS, PAY_SC_SUPPLIES } from "../constants/paymentSource.js";
+import { PAY_SC_RETURNS, PAY_SC_INVENTORY } from "../constants/paymentSource.js";
 import {
   PAY_METHOD_BACK_TRN,
   PAY_METHOD_CARD,
@@ -177,7 +177,7 @@ export const createSupplierPaymentsController = async (req, res) => {
       paymentMethod: value.paymentMethod,
       paymentCollectedBy: new ObjectId(req.user.id),
       paymentType: PAYMENT_TYPE_OUT,
-      paymentSource: PAY_SC_SUPPLIES,
+      paymentSource: PAY_SC_INVENTORY,
       paymentNotes: isValidString(value.paymentNotes)
         ? value.paymentNotes
         : "Supplier payments",

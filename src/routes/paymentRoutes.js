@@ -5,9 +5,9 @@ import {
   createGrnPaymentRecordController,
   createIncomePaymentController,
   createRefundPaymentController,
-  createWorkorderPaymentController,
+  createInvoicePaymentController,
   deletePaymentRecordController,
-  deleteWorkorderPaymentController,
+  deleteInvoicePaymentController,
   generateReportSummaryController,
   getAccountSummaryController,
   getAllPaymentsController,
@@ -16,12 +16,12 @@ import {
   getGrnPaymentRecordsController,
   getIncomeExpenseSummaryContorller,
   updatePaymentRecordStatusController,
-  workorderPaymentsController,
+  invoicePaymentsController,
 } from "../controllers/paymentController.js";
 
 const paymentRoutes = express.Router();
 
-paymentRoutes.get("/auth/wo-payments", workorderPaymentsController);
+paymentRoutes.get("/auth/invoice-payments", invoicePaymentsController);
 paymentRoutes.put(
   "/auth/complete-payment",
   updatePaymentRecordStatusController
@@ -31,10 +31,10 @@ paymentRoutes.get(
   "/auth/pending-payments",
   getAllPendingPaymentRecordsController
 );
-paymentRoutes.post("/auth/add", createWorkorderPaymentController);
+paymentRoutes.post("/auth/add", createInvoicePaymentController);
 paymentRoutes.delete(
-  "/supAuth/delete-wo-payment",
-  deleteWorkorderPaymentController
+  "/supAuth/delete-invoice-payment",
+  deleteInvoicePaymentController
 );
 paymentRoutes.post("/auth/add-expenses", createExpensesPaymentController);
 paymentRoutes.delete("/supAuth/delete-payment", deletePaymentRecordController);

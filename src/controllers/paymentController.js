@@ -8,6 +8,7 @@ import {
   customer_not_found,
   emp_not_found,
   grn_not_found,
+  invoice_not_found,
   payment_already_completed,
   payment_already_processed,
   payment_cannot_delete_generated,
@@ -44,8 +45,8 @@ import {
   PAY_SC_ADVANCE_PAYMENTS,
   PAY_SC_COMBINED,
   PAY_SC_CUS_REFUNDS,
-  PAY_SC_SERVICE,
-  PAY_SC_SUPPLIES,
+  PAY_SC_SALES_RETAIL,
+  PAY_SC_INVENTORY,
 } from "../constants/paymentSource.js";
 import { updateAccountData } from "./inventoryController.js";
 import { expensePaymentSchema } from "../schemas/payments/expensePaymentSchema.js";
@@ -74,9 +75,11 @@ import grnModel from "../models/grnModel.js";
 import supplierModel from "../models/supplierModel.js";
 import { empAdvancePaymentSchema } from "../schemas/payments/empAdvancePaymentSchema.js";
 import employeeModel from "../models/employeeModel.js";
+import invoiceModel from "../models/invoiceModel.js";
+import { INV_CUS_TYP_REGISTERED } from "../constants/invoiceConstants.js";
 
-// Add payment controller - workOrders
-export const createWorkorderPaymentController = async (req, res) => {
+// Add payment controller - invoice
+export const createInvoicePaymentController = async (req, res) => {
   const { error, value } = paymentSchema.validate(req.body);
 
   if (error) {
@@ -84,35 +87,48 @@ export const createWorkorderPaymentController = async (req, res) => {
       .status(httpStatus.BAD_REQUEST)
       .json(ApiResponse.error(error_code, error.message));
   }
+
+  const {
+    paymentInvoice,
+    paymentAmount,
+    paymentMethod,
+    paymentTransactionId,
+    paymentNotes,
+  } = value;
+
   try {
-    const workOrder = await workOrderModel
-      .findById(new ObjectId(value.paymentworkOrder))
-      .populate("workOrderVehicle");
+    const invoice = await invoiceModel.findById(new ObjectId(paymentInvoice));
 
-    if (!workOrder) {
+    if (!invoice) {
       return res
-        .status(httpStatus.BAD_REQUEST)
-        .json(ApiResponse.error(error_code, wo_not_found));
+        .status(httpStatus.NOT_FOUND)
+        .json(ApiResponse.error(error_code, invoice_not_found));
     }
 
-    const customer = await customerModel.findById(
-      new ObjectId(value.paymentCustomer)
-    );
+    let customer = null;
 
-    if (!customer) {
-      return res
-        .status(httpStatus.BAD_REQUEST)
-        .json(ApiResponse.error(error_code, customer_not_found));
+    if (
+      invoice.invoiceCustomerType === INV_CUS_TYP_REGISTERED &&
+      invoice.invoiceCustomer
+    ) {
+      customer = await customerModel.findById(
+        new ObjectId(invoice.invoiceCustomer)
+      );
+
+      if (!customer) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json(ApiResponse.error(error_code, customer_not_found));
+      }
     }
 
-    if (workOrder.workOrderPaymentStatus === PAY_STATUS_PAID) {
+    if (invoice.invoicePaymentStatus === PAY_STATUS_PAID) {
       return res
         .status(httpStatus.BAD_REQUEST)
         .json(ApiResponse.error(info_code, payment_already_completed));
     }
 
-    const balanceAmount =
-      workOrder.workOrderBalanceAmount - value.paymentAmount;
+    const balanceAmount = invoice.invoiceBalanceAmount - paymentAmount;
 
     if (balanceAmount < 0) {
       return res
@@ -121,33 +137,34 @@ export const createWorkorderPaymentController = async (req, res) => {
     }
 
     const newPayment = new paymentModel({
-      paymentworkOrder: new ObjectId(workOrder._id),
-      paymentCustomer: new ObjectId(customer._id),
+      paymentInvoice: new ObjectId(invoice._id),
+      paymentCustomer: customer ? new ObjectId(customer._id) : null,
       paymentCollectedBy: new ObjectId(req.user.id),
       paymentType: PAYMENT_TYPE_IN,
-      paymentSource: PAY_SC_SERVICE,
+      paymentSource: PAY_SC_SALES_RETAIL,
       paymentStatus:
-        value.paymentMethod === PAY_METHOD_CHEQUE
+        paymentMethod === PAY_METHOD_CHEQUE
           ? PAY_STATUS_PENDING
           : PAY_STATUS_COMPLETED,
-      paymentNotes: isValidString(value.paymentNotes)
-        ? value.paymentNotes
-        : "Customer payments " + workOrder.workOrderVehicle.vehicleNumber,
-      ...value,
+      paymentNotes: isValidString(paymentNotes)
+        ? paymentNotes
+        : "Customer invoice payments " + invoice.invoiceNumber,
+      paymentMethod,
+      paymentAmount,
+      paymentTransactionId,
     });
 
     const savedPayment = await newPayment.save();
 
     if (savedPayment.paymentMethod != PAY_METHOD_CHEQUE) {
-      const paidAmount =
-        workOrder.workOrderPaidAmount + savedPayment.paymentAmount;
+      const paidAmount = invoice.invoicePaidAmount + savedPayment.paymentAmount;
 
-      workOrder.workOrderBalanceAmount = balanceAmount;
-      workOrder.workOrderPaidAmount = paidAmount;
-      workOrder.workOrderPaymentStatus =
+      invoice.invoiceBalanceAmount = balanceAmount;
+      invoice.invoicePaidAmount = paidAmount;
+      invoice.invoicePaymentStatus =
         balanceAmount <= 0 ? PAY_STATUS_PAID : PAY_STATUS_PARTIALLY_PAID;
 
-      await workOrder.save();
+      await invoice.save();
     }
 
     if (
@@ -190,12 +207,12 @@ export const createWorkorderPaymentController = async (req, res) => {
   }
 };
 
-// Delete payment record - workorders
-export const deleteWorkorderPaymentController = async (req, res) => {
+// Delete payment record - invoice
+export const deleteInvoicePaymentController = async (req, res) => {
   const id = req.query.id;
 
   try {
-    const record = await paymentModel.findById(new mongoose.Types.ObjectId(id));
+    const record = await paymentModel.findById(new ObjectId(id));
 
     if (!record) {
       return res
@@ -203,14 +220,14 @@ export const deleteWorkorderPaymentController = async (req, res) => {
         .json(ApiResponse.error(error_code, payment_record_notfound));
     }
 
-    const workorder = await workOrderModel.findById(
-      new mongoose.Types.ObjectId(record.paymentworkOrder)
+    const invoice = await invoiceModel.findById(
+      new ObjectId(record.paymentInvoice)
     );
 
-    if (!workorder) {
+    if (!invoice) {
       return res
         .status(httpStatus.BAD_REQUEST)
-        .json(ApiResponse.error(error_code, wo_not_found));
+        .json(ApiResponse.error(error_code, invoice_not_found));
     }
 
     if (
@@ -239,15 +256,15 @@ export const deleteWorkorderPaymentController = async (req, res) => {
       record.paymentAmount
     );
 
-    const newPaidAmount = workorder.workOrderPaidAmount - record.paymentAmount;
+    const newPaidAmount = invoice.invoicePaidAmount - record.paymentAmount;
     const newBalanceAmount =
-      workorder.workOrderBalanceAmount + record.paymentAmount;
+      invoice.invoiceBalanceAmount + record.paymentAmount;
 
-    workorder.workOrderPaidAmount = newPaidAmount;
-    workorder.workOrderBalanceAmount = newBalanceAmount;
-    workorder.workOrderPaymentStatus = PAY_STATUS_PARTIALLY_PAID;
+    invoice.invoicePaidAmount = newPaidAmount;
+    invoice.invoiceBalanceAmount = newBalanceAmount;
+    invoice.invoicePaymentStatus = PAY_STATUS_PARTIALLY_PAID;
 
-    await workorder.save();
+    await invoice.save();
 
     await paymentModel.deleteOne(record);
 
@@ -293,21 +310,20 @@ export const updatePaymentRecordStatusController = async (req, res) => {
 
     await result.save();
 
-    const workorder = await workOrderModel.findById(
-      new ObjectId(result.paymentworkOrder)
+    const invoice = await invoiceModel.findById(
+      new ObjectId(result.paymentInvoice)
     );
 
-    const balanceAmount =
-      workorder.workOrderBalanceAmount - result.paymentAmount;
+    const balanceAmount = invoice.invoiceBalanceAmount - result.paymentAmount;
 
-    const paidAmount = workorder.workOrderPaidAmount + result.paymentAmount;
+    const paidAmount = invoice.invoicePaidAmount + result.paymentAmount;
 
-    workorder.workOrderBalanceAmount = balanceAmount;
-    workorder.workOrderPaidAmount = paidAmount;
-    workorder.workOrderPaymentStatus =
+    invoice.invoiceBalanceAmount = balanceAmount;
+    invoice.invoicePaidAmount = paidAmount;
+    invoice.invoicePaymentStatus =
       balanceAmount <= 0 ? PAY_STATUS_PAID : PAY_STATUS_PARTIALLY_PAID;
 
-    await workorder.save();
+    await invoice.save();
 
     return res
       .status(httpStatus.OK)
@@ -487,7 +503,7 @@ export const createIncomePaymentController = async (req, res) => {
   }
 };
 
-// Create refund record
+// TODO Create refund record -- REFACTOR
 export const createRefundPaymentController = async (req, res) => {
   const { error, value } = refundSchema.validate(req.body);
 
@@ -613,7 +629,7 @@ export const createGrnPaymentRecordController = async (req, res) => {
       paymentSupplier: new ObjectId(record.grnSupplier),
       paymentCollectedBy: new ObjectId(req.user.id),
       paymentType: PAYMENT_TYPE_OUT,
-      paymentSource: PAY_SC_SUPPLIES,
+      paymentSource: PAY_SC_INVENTORY,
       paymentStatus: PAY_STATUS_COMPLETED,
       paymentNotes: isValidString(otherValues.paymentNotes)
         ? otherValues.paymentNotes
@@ -830,21 +846,21 @@ export const getAllPendingPaymentRecordsController = async (req, res) => {
   }
 };
 
-// Get Customer Workorder Payments Controller
-export const workorderPaymentsController = async (req, res) => {
+// Get Customer Invoice Payments Controller
+export const invoicePaymentsController = async (req, res) => {
   const id = req.query.id;
   try {
-    const workorder = await workOrderModel.findById(new ObjectId(id));
+    const invoice = await invoiceModel.findById(new ObjectId(id));
 
-    if (!workorder) {
+    if (!invoice) {
       return res
-        .status(httpStatus.BAD_REQUEST)
-        .json(ApiResponse.error(error_code, wo_not_found));
+        .status(httpStatus.NOT_FOUND)
+        .json(ApiResponse.error(error_code, invoice_not_found));
     }
 
     const payments = await paymentModel
       .find({
-        paymentworkOrder: new ObjectId(workorder._id),
+        paymentInvoice: new ObjectId(invoice._id),
       })
       .populate({
         path: "paymentCollectedBy",
@@ -852,7 +868,7 @@ export const workorderPaymentsController = async (req, res) => {
       });
 
     return res
-      .status(httpStatus.CREATED)
+      .status(httpStatus.OK)
       .json(ApiResponse.response(success_code, success_message, payments));
   } catch (error) {
     return res
@@ -879,7 +895,7 @@ export const getGrnPaymentRecordsController = async (req, res) => {
     });
 
     return res
-      .status(httpStatus.CREATED)
+      .status(httpStatus.OK)
       .json(ApiResponse.response(success_code, success_message, data));
   } catch (error) {
     return res
@@ -894,7 +910,7 @@ export const getAccountSummaryController = async (req, res) => {
     const data = await accountBalanceModel.find();
 
     return res
-      .status(httpStatus.CREATED)
+      .status(httpStatus.OK)
       .json(ApiResponse.response(success_code, success_message, data));
   } catch (error) {
     return res
@@ -944,7 +960,7 @@ export const getIncomeExpenseSummaryContorller = async (req, res) => {
       { $sort: { _id: 1 } },
     ]);
 
-    return res.status(httpStatus.CREATED).json(
+    return res.status(httpStatus.OK).json(
       ApiResponse.response(success_code, success_message, {
         incomeData: incomeResults,
         expenseData: expenseResults,
