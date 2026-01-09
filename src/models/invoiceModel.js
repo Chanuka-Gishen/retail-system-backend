@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import {
   INVOICE_STATUS,
-  WO_STATUS_OPEN,
+  STATUS_OPEN,
 } from "../constants/workorderStatus.js";
 import { PAY_STATUS, PAY_STATUS_UNPAID } from "../constants/paymentStatus.js";
 import { INV_CUSTOMER_TYPES } from "../constants/invoiceConstants.js";
@@ -31,7 +31,7 @@ const invoiceSchema = new Schema(
     invoiceStatus: {
       type: String,
       enum: INVOICE_STATUS,
-      default: WO_STATUS_OPEN,
+      default: STATUS_OPEN,
     },
     invoicePaymentStatus: {
       type: String,

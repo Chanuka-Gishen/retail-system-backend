@@ -4,7 +4,7 @@ import {
   getSequenceValue,
   updateSequenceValue,
 } from "../controllers/sequenceController.js";
-import { SEQ_INVOICE } from "../constants/sequenceConstants.js";
+import { SEQ_INVOICE, SEQ_RETURN } from "../constants/sequenceConstants.js";
 
 export const isValidString = (str) => {
   return (
@@ -65,6 +65,20 @@ export const generateInvoiceNumber = async () => {
 
   return invoiceNumber;
 };
+
+export const generateReturnCode = async() => {
+  await updateSequenceValue(SEQ_RETURN);
+  const sequenceValue = await getSequenceValue(SEQ_RETURN);
+
+  const sequenceLength = 5;
+
+  const stringValue = sequenceValue.toString();
+  const formattedSequence = stringValue.padStart(sequenceLength, "0");
+
+  const returnCode = `RTN${formattedSequence}`;
+
+  return returnCode;
+}
 
 export const generateGrnNumber = (value) => {
   const date = new Date();

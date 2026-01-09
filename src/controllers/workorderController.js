@@ -29,9 +29,9 @@ import {
   wo_not_found,
 } from "../constants/messageConstants.js";
 import {
-  WO_STATUS_CLOSED,
-  WO_STATUS_COMPLETED,
-  WO_STATUS_OPEN,
+  STATUS_CLOSED,
+  STATUS_COMPLETED,
+  STATUS_OPEN,
 } from "../constants/workorderStatus.js";
 import { workOrderUpdateSchema } from "../schemas/workorder/workorderUpdateSchema.js";
 import { SEQ_WO } from "../constants/sequenceConstants.js";
@@ -99,7 +99,7 @@ export const createWorkOrderController = async (req, res) => {
 
     const isOpenOrderExists = await workOrderModel.findOne({
       workOrderVehicle: new ObjectId(isVehicleExist._id),
-      workOrderStatus: { $ne: WO_STATUS_CLOSED },
+      workOrderStatus: { $ne: STATUS_CLOSED },
     });
 
     if (isOpenOrderExists) {
@@ -148,7 +148,7 @@ export const updateWorkOrderController = async (req, res) => {
         .json(ApiResponse.error(error_code, wo_not_found));
     }
 
-    if (workOrder.workOrderStatus === WO_STATUS_CLOSED) {
+    if (workOrder.workOrderStatus === STATUS_CLOSED) {
       return res
         .status(httpStatus.BAD_REQUEST)
         .json(ApiResponse.error(info_code, wo_already_completed));
@@ -397,7 +397,7 @@ export const updateWorkOrderController = async (req, res) => {
 
     await workOrder.save();
 
-    // if (value.workOrderStatus === WO_STATUS_COMPLETED) {
+    // if (value.workOrderStatus === STATUS_COMPLETED) {
     //   await Promise.all(
     //     savedWorkOrder.workOrderServiceItems.map(async (item) => {
     //       await Inventory.findByIdAndUpdate(new ObjectId(item.inventoryItem), {
@@ -442,7 +442,7 @@ export const getAllWorkordersController = async (req, res) => {
     const paymentStatus = req.query.paymentStatus;
 
     const query = {};
-    query.workOrderStatus = WO_STATUS_CLOSED;
+    query.workOrderStatus = STATUS_CLOSED;
 
     if (isValidString(invoiceNumber)) {
       query.workOrderInvoiceNumber = {
@@ -598,7 +598,7 @@ export const getAllWorkordersController = async (req, res) => {
 export const getActiveWorkOrdersController = async (req, res) => {
   try {
     const data = await workOrderModel
-      .find({ workOrderStatus: { $ne: WO_STATUS_CLOSED } })
+      .find({ workOrderStatus: { $ne: STATUS_CLOSED } })
       .populate("workOrderCustomer")
       .populate("workOrderVehicle");
 
@@ -628,7 +628,7 @@ export const downloadWorkOrderController = async (req, res) => {
     }
 
     if (
-      data.workOrderStatus === WO_STATUS_OPEN ||
+      data.workOrderStatus === STATUS_OPEN ||
       data.workOrderTotalAmount === 0
     ) {
       return res
@@ -679,7 +679,7 @@ export const updateToCompleteController = async (req, res) => {
         .json(ApiResponse.error(error_code, wo_not_found));
     }
 
-    if (job.workOrderStatus != WO_STATUS_OPEN) {
+    if (job.workOrderStatus != STATUS_OPEN) {
       return res
         .status(httpStatus.BAD_REQUEST)
         .json(ApiResponse.error(error_code, wo_invalid_status));
@@ -693,7 +693,7 @@ export const updateToCompleteController = async (req, res) => {
       job.workOrderInvoiceNumber = invoiceNumber;
     }
 
-    job.workOrderStatus = WO_STATUS_COMPLETED;
+    job.workOrderStatus = STATUS_COMPLETED;
 
     await job.save();
 
@@ -719,13 +719,13 @@ export const updateToCloseController = async (req, res) => {
         .json(ApiResponse.error(error_code, wo_not_found));
     }
 
-    if (job.workOrderStatus != WO_STATUS_COMPLETED) {
+    if (job.workOrderStatus != STATUS_COMPLETED) {
       return res
         .status(httpStatus.BAD_REQUEST)
         .json(ApiResponse.error(error_code, wo_invalid_status));
     }
 
-    job.workOrderStatus = WO_STATUS_CLOSED;
+    job.workOrderStatus = STATUS_CLOSED;
     job.workOrderPaymentStatus =
       job.workOrderTotalAmount === 0
         ? PAY_STATUS_PAID
@@ -972,7 +972,7 @@ export const workorderInvoiceEmailController = async (req, res) => {
         .json(ApiResponse.error(error_code, customer_email_not_found));
     }
 
-    if (data.workOrderStatus != WO_STATUS_CLOSED) {
+    if (data.workOrderStatus != STATUS_CLOSED) {
       return res
         .status(httpStatus.BAD_REQUEST)
         .json(ApiResponse.error(info_code, wo_not_closed));
@@ -1158,7 +1158,7 @@ export const getTotalReceivablesController = async (req, res) => {
           workOrderBalanceAmount: { $gt: 0 }, // Only orders with outstanding balance
         },
       },
-      {
+      { 
         $group: {
           _id: null,
           totalReceivables: { $sum: "$workOrderBalanceAmount" },
@@ -1194,7 +1194,7 @@ export const getTotalReceivablesController = async (req, res) => {
 export const getTotalActiveJobsCountController = async (req, res) => {
   try {
     const data = await workOrderModel.countDocuments({
-      workOrderStatus: { $ne: WO_STATUS_CLOSED },
+      workOrderStatus: { $ne: STATUS_CLOSED },
     });
 
     return res

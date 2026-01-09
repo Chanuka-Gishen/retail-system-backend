@@ -15,6 +15,7 @@ import {
 } from "../constants/statusCodes.js";
 import {
   customer_not_found,
+  id_required,
   invoice_cannot_close_not_completed,
   invoice_cannot_complete_not_open,
   invoice_cannot_edit,
@@ -24,6 +25,9 @@ import {
   invoice_not_items_cannot_complete,
   item_insufficient_stock_quantity,
   item_not_found,
+  return_quantity_exceeded,
+  return_record_expired,
+  return_record_not_found,
   success_message,
 } from "../constants/messageConstants.js";
 import {
@@ -42,12 +46,15 @@ import {
 } from "../constants/priceChangeStatus.js";
 import {
   INVOICE_STATUS,
-  WO_STATUS_CLOSED,
-  WO_STATUS_COMPLETED,
-  WO_STATUS_OPEN,
+  STATUS_CLOSED,
+  STATUS_COMPLETED,
+  STATUS_EXPIRED,
+  STATUS_OPEN,
+  STATUS_PROCESSED,
 } from "../constants/workorderStatus.js";
 import {
   generateInvoiceNumber,
+  generateReturnCode,
   isValidString,
 } from "../services/commonServices.js";
 import { updateAccountData } from "./inventoryController.js";
@@ -57,6 +64,13 @@ import {
   PAYMENT_TYPE_OUT,
 } from "../constants/paymentTypes.js";
 import { PAY_STATUS } from "../constants/paymentStatus.js";
+import invoiceItemReturnModel from "../models/returnModel.js";
+import { returnItemSchema } from "../schemas/invoice/returnItemSchema.js";
+import returnModel from "../models/returnModel.js";
+import returnItemModel from "../models/returnItemModel.js";
+import paymentModel from "../models/paymentModel.js";
+import { PAY_SC_CUS_REFUNDS } from "../constants/paymentSource.js";
+import { PAY_METHOD_CASH } from "../constants/paymentMethods.js";
 
 // Create new invoice controller
 export const createInvoiceController = async (req, res) => {
@@ -199,7 +213,7 @@ export const addInvoiceItemController = async (req, res) => {
         .json(ApiResponse.error(error_code, invoice_not_found));
     }
 
-    if (existingInvoice.invoiceStatus != WO_STATUS_OPEN) {
+    if (existingInvoice.invoiceStatus != STATUS_OPEN) {
       return res
         .status(httpStatus.NOT_FOUND)
         .json(ApiResponse.error(error_code, invoice_cannot_edit));
@@ -318,7 +332,7 @@ export const updateInvoiceItemController = async (req, res) => {
         .json(ApiResponse.error(error_code, invoice_item_not_found));
     }
 
-    if (existingInvoiceItem.invoice.invoiceStatus != WO_STATUS_OPEN) {
+    if (existingInvoiceItem.invoice.invoiceStatus != STATUS_OPEN) {
       return res
         .status(httpStatus.NOT_FOUND)
         .json(ApiResponse.error(error_code, invoice_cannot_edit));
@@ -398,7 +412,7 @@ export const deleteInvoiceItemController = async (req, res) => {
       .findById(new ObjectId(id))
       .populate("invoice");
 
-    if (invoiceItem.invoice.invoiceStatus != WO_STATUS_OPEN) {
+    if (invoiceItem.invoice.invoiceStatus != STATUS_OPEN) {
       return res
         .status(httpStatus.NOT_FOUND)
         .json(ApiResponse.error(error_code, invoice_cannot_edit));
@@ -446,7 +460,7 @@ export const getInvoicesController = async (req, res) => {
   const customerName = req.query.name;
   const customerMobile = req.query.mobile;
 
-  const query = { invoiceStatus: WO_STATUS_CLOSED };
+  const query = { invoiceStatus: STATUS_CLOSED };
 
   if (INV_CUSTOMER_TYPES.includes(customerType)) {
     query.invoiceCustomerType = customerType;
@@ -573,7 +587,7 @@ export const getNotClosedInvoicesController = async (req, res) => {
 
   try {
     const data = await invoiceModel
-      .find({ invoiceStatus: { $in: [WO_STATUS_OPEN, WO_STATUS_COMPLETED] } })
+      .find({ invoiceStatus: { $in: [STATUS_OPEN, STATUS_COMPLETED] } })
       .skip(skip)
       .limit(limit)
       .populate({ path: "invoiceCustomer", strictPopulate: false });
@@ -647,7 +661,7 @@ export const completeInvoiceController = async (req, res) => {
         .json(ApiResponse.error(error_code, invoice_not_found));
     }
 
-    if (invoice.invoiceStatus != WO_STATUS_OPEN) {
+    if (invoice.invoiceStatus != STATUS_OPEN) {
       return res
         .status(httpStatus.PRECONDITION_FAILED)
         .json(ApiResponse.error(error_code, invoice_cannot_complete_not_open));
@@ -733,7 +747,7 @@ export const completeInvoiceController = async (req, res) => {
 
     const invoiceNumber = await generateInvoiceNumber();
 
-    invoice.invoiceStatus = WO_STATUS_COMPLETED;
+    invoice.invoiceStatus = STATUS_COMPLETED;
     invoice.invoiceNumber = invoiceNumber;
     invoice.invoiceTotalAmount = total;
     invoice.invoiceGrossTotal = grossTotal;
@@ -771,7 +785,7 @@ export const closeInvoiceController = async (req, res) => {
         .json(ApiResponse.error(error_code, invoice_not_found));
     }
 
-    if (invoice.invoiceStatus != WO_STATUS_COMPLETED) {
+    if (invoice.invoiceStatus != STATUS_COMPLETED) {
       return res
         .status(httpStatus.PRECONDITION_FAILED)
         .json(
@@ -779,13 +793,479 @@ export const closeInvoiceController = async (req, res) => {
         );
     }
 
-    invoice.invoiceStatus = WO_STATUS_CLOSED;
+    invoice.invoiceStatus = STATUS_CLOSED;
     invoice.invoiceClosedAt = new Date();
     await invoice.save();
 
     return res
       .status(httpStatus.OK)
       .json(ApiResponse.response(success_code, success_message));
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
+// Return invoice item controller
+export const returnInvoiceItemController = async (req, res) => {
+  const { error, value } = returnItemSchema.validate(req.body);
+
+  if (error) {
+    return res
+      .status(httpStatus.BAD_REQUEST)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+
+  const { returnInvoice, returnItems } = value;
+
+  try {
+    const invoice = await invoiceModel.findById(new ObjectId(returnInvoice));
+
+    if (!invoice) {
+      return res
+        .status(httpStatus.NOT_FOUND)
+        .json(ApiResponse.error(error_code, invoice_not_found));
+    }
+
+    const existingReturnRecord = await returnModel.findOne({
+      returnInvoice: new ObjectId(invoice._id),
+    });
+
+    let existingReturnItems = [];
+
+    if (existingReturnRecord) {
+      existingReturnItems = await returnItemModel.find({
+        returnInvoice: new ObjectId(existingReturnRecord._id),
+      });
+    }
+
+    let subTotalValue = 0;
+    const newReturnItems = [];
+
+    for (const item of returnItems) {
+      const { returnInvoiceItem, returnQuantity, returnReason } = item;
+
+      const invoiceItem = await invoiceItemModel.findById(
+        new ObjectId(returnInvoiceItem)
+      );
+
+      if (!invoiceItem) {
+        return res
+          .status(httpStatus.NOT_FOUND)
+          .json(ApiResponse.error(error_code, invoice_item_not_found));
+      }
+
+      let processedQty = 0;
+
+      if (existingReturnItems.length > 0) {
+        const existingItem = existingReturnItems.find(
+          (v) => v.returnInvoiceItem === returnInvoiceItem
+        );
+
+        if (existingItem) {
+          processedQty = existingItem.returnQuantity;
+        }
+      }
+
+      const totalQty = processedQty + returnQuantity;
+
+      if (totalQty > invoiceItem.quantity) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json(ApiResponse.error(error_code, return_quantity_exceeded));
+      }
+
+      const totalValue = returnQuantity * invoiceItem.unitPrice;
+      subTotalValue += totalValue;
+
+      newReturnItems.push({
+        returnInvoiceItem: new ObjectId(invoiceItem._id),
+        returnInventoryItem: new ObjectId(invoiceItem.item),
+        returnOriginalQuantity: invoiceItem.quantity,
+        returnQuantity: returnQuantity,
+        returnItemTotalValue: totalValue,
+        returnReason: returnReason,
+      });
+    }
+
+    const returnCode = await generateReturnCode();
+
+    const newReturnInvoice = new returnModel({
+      returnInvoice: new ObjectId(invoice._id),
+      returnCode,
+      returnTotalValue: subTotalValue,
+      returnIssuedBy: new ObjectId(req.user.id),
+    });
+
+    const savedReturnInvoice = await newReturnInvoice.save();
+
+    const updatedReturnItems = newReturnItems.map((item) => {
+      return new returnItemModel({
+        ...item,
+        returnInvoice: new ObjectId(savedReturnInvoice._id),
+      });
+    });
+
+    await returnItemModel.create(updatedReturnItems);
+
+    return res
+      .status(httpStatus.OK)
+      .json(ApiResponse.response(success_code, success_message));
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
+// Get return items for a invoice controller
+export const getReturnInvoiceItemsController = async (req, res) => {
+  const id = req.query.id;
+
+  try {
+    if (!id) {
+      return res
+        .status(httpStatus.PRECONDITION_FAILED)
+        .json(ApiResponse.response(info_code, id_required));
+    }
+
+    const data = await returnModel.aggregate([
+      {
+        $match: {
+          returnInvoice: new ObjectId(id),
+        },
+      },
+      {
+        $lookup: {
+          from: "returnitems",
+          let: { invoiceId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$returnInvoice", "$$invoiceId"] },
+              },
+            },
+            {
+              $lookup: {
+                from: "inventories",
+                let: { inventoryId: "$returnInventoryItem" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: { $eq: ["$_id", "$$inventoryId"] },
+                    },
+                  },
+                  {
+                    $project: {
+                      itemName: 1,
+                      itemCode: 1,
+                    },
+                  },
+                ],
+                as: "returnInventoryItem",
+              },
+            },
+            { $unwind: "$returnInventoryItem" },
+          ],
+          as: "returnItems",
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          let: { userId: "$returnIssuedBy" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", "$$userId"] },
+              },
+            },
+            {
+              $project: {
+                userFirstName: 1,
+                userLastName: 1,
+              },
+            },
+          ],
+          as: "returnIssuedBy",
+        },
+      },
+      {
+        $unwind: "$returnIssuedBy",
+      },
+    ]);
+
+    return res
+      .status(httpStatus.OK)
+      .json(ApiResponse.response(success_code, success_message, data));
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
+// Process return record
+export const processReturnRecordController = async (req, res) => {
+  const id = req.query.id;
+
+  if (!id) {
+    return res
+      .status(httpStatus.PRECONDITION_FAILED)
+      .json(ApiResponse.response(info_code, id_required));
+  }
+
+  try {
+    const data = await returnModel.findById(new ObjectId(id));
+
+    if (!data) {
+      return res
+        .status(httpStatus.NOT_FOUND)
+        .json(ApiResponse.response(error_code, return_record_not_found));
+    }
+
+    const today = new Date();
+
+    if (today > data.returnExpiresAt) {
+      data.returnStatus = STATUS_EXPIRED;
+      data.returnProcessedBy = new ObjectId(req.user.id);
+
+      await data.save();
+
+      return res
+        .status(httpStatus.BAD_REQUEST)
+        .json(ApiResponse.response(info_code, return_record_expired));
+    }
+
+    data.returnStatus = STATUS_PROCESSED;
+    data.returnProcessedBy = new ObjectId(req.user.id);
+
+    const savedData = await data.save();
+
+    await paymentModel.create({
+      paymentInvoice: new ObjectId(savedData.returnInvoice),
+      paymentAmount: savedData.returnTotalValue,
+      paymentReturnRef: new ObjectId(savedData._id),
+      paymentType: PAYMENT_TYPE_OUT,
+      paymentSource: PAY_SC_CUS_REFUNDS,
+      paymentMethod: PAY_METHOD_CASH,
+      paymentCollectedBy: new ObjectId(req.user.id),
+    });
+
+    // TODO
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
+// Today sales - Statistics
+export const todayInvoiceSalesController = async (req, res) => {
+  try {
+    const result = await invoiceModel.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: new Date(new Date().setHours(0, 0, 0, 0)), // Start of today
+            $lt: new Date(new Date().setHours(23, 59, 59, 999)), // End of today
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$invoiceSubTotal" },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          total: 1,
+          count: "$count",
+        },
+      },
+    ]);
+
+    return res
+      .status(httpStatus.OK)
+      .json(
+        ApiResponse.response(
+          success_code,
+          success_message,
+          result[0]?.total ?? 0
+        )
+      );
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
+// Today sales profit - Statistics
+export const todayGrossProfitController = async (req, res) => {
+  try {
+    const result = await invoiceModel.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: new Date(new Date().setHours(0, 0, 0, 0)), // Start of today
+            $lt: new Date(new Date().setHours(23, 59, 59, 999)), // End of today
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$invoiceGrossTotal" },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          total: 1,
+          count: "$count",
+        },
+      },
+    ]);
+
+    return res
+      .status(httpStatus.OK)
+      .json(
+        ApiResponse.response(
+          success_code,
+          success_message,
+          result[0]?.total ?? 0
+        )
+      );
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
+// Today invoices count - Statistics
+export const todayInvoicesCountController = async (req, res) => {
+  try {
+    const result = await invoiceModel.countDocuments({
+      createdAt: {
+        $gte: new Date(new Date().setHours(0, 0, 0, 0)), // Start of today
+        $lt: new Date(new Date().setHours(23, 59, 59, 999)), // End of today
+      },
+    });
+
+    return res
+      .status(httpStatus.OK)
+      .json(ApiResponse.response(success_code, success_message, result ?? 0));
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
+// Past Sales - Statistics
+export const pastInvoiceSalesController = async (req, res) => {
+  const days = req.query.days || 7;
+  try {
+    const data = await invoiceModel.aggregate([
+      [
+        {
+          $match: {
+            createdAt: {
+              $gte: new Date(
+                new Date().setHours(0, 0, 0, 0) - days * 24 * 60 * 60 * 1000
+              ), // Last 7 days
+              $lt: new Date(new Date().setHours(23, 59, 59, 999)),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$createdAt",
+              },
+            },
+            total: { $sum: "$invoiceSubTotal" },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $sort: {
+            _id: 1,
+          },
+        },
+        {
+          $project: {
+            date: "$_id",
+            total: 1,
+            _id: 0,
+          },
+        },
+      ],
+    ]);
+
+    return res
+      .status(httpStatus.OK)
+      .json(ApiResponse.response(success_code, success_message, data));
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json(ApiResponse.error(error_code, error.message));
+  }
+};
+
+// Past invoices Count - Statistics
+export const pastInvoicesCountController = async (req, res) => {
+  const days = req.query.days || 7;
+
+  try {
+    const data = await invoiceModel.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: new Date(
+              new Date().setHours(0, 0, 0, 0) - days * 24 * 60 * 60 * 1000
+            ), // Last 7 days
+            $lt: new Date(new Date().setHours(23, 59, 59, 999)),
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$createdAt",
+            },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $sort: {
+          _id: 1,
+        },
+      },
+      {
+        $project: {
+          date: "$_id",
+          count: 1,
+          _id: 0,
+        },
+      },
+    ]);
+
+    return res
+      .status(httpStatus.OK)
+      .json(ApiResponse.response(success_code, success_message, data));
   } catch (error) {
     return res
       .status(httpStatus.INTERNAL_SERVER_ERROR)

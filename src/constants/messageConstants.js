@@ -8,6 +8,7 @@ export const logged_out_success = "Successfully Logged Out";
 export const success_message = "Success";
 export const success_message_delete = "Successfuly Deleted";
 export const failed_message_delete = "Delete record failed";
+export const id_required = "ID requried";
 
 export const forbidden = "Access permission needed";
 
@@ -58,6 +59,9 @@ export const invoice_cannot_complete_not_open =
   "Only open invoices can be completed";
 export const invoice_cannot_close_not_completed =
   "Only completed invoices can be closed";
+
+export const return_quantity_exceeded =
+  "Cannot return more than the purchased quantity";
 
 export const wo_not_found = "Workorder not found";
 export const wo_invalid_status = "Invalid status";
@@ -112,6 +116,7 @@ export const return_record_not_found = "Return record not found";
 export const return_not_processed = "Could not process this record";
 export const return_already_processed = "Return already processed";
 export const return_qty_not_valid = "Quantity is higher than the actual stock";
+export const return_record_expired = "Return record expired, cannot continue";
 
 export const grn_not_found = "GRN record not found";
 

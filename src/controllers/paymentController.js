@@ -67,7 +67,7 @@ import {
 import { generateAccountsSummaryReport } from "../services/pdfServices.js";
 import { incomePaymentSchema } from "../schemas/payments/incomePaymentSchema.js";
 import { refundSchema } from "../schemas/grn/refundSchema.js";
-import { WO_STATUS_CLOSED } from "../constants/workorderStatus.js";
+import { STATUS_CLOSED } from "../constants/workorderStatus.js";
 import mongoose from "mongoose";
 import { PAY_INPUT_MANUALLY } from "../constants/paymentInputType.js";
 import { grnPaymentSchema } from "../schemas/payments/grnPaymentSchema.js";
@@ -539,7 +539,7 @@ export const createRefundPaymentController = async (req, res) => {
     }
 
     workorder.workOrderPaymentStatus = PAY_STATUS_REFUNDED;
-    workorder.workOrderStatus = WO_STATUS_CLOSED;
+    workorder.workOrderStatus = STATUS_CLOSED;
 
     const savedWorkorder = await workorder.save();
 

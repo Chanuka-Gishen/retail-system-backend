@@ -40,7 +40,7 @@ import {
 } from "../constants/constants.js";
 import { updateBookingSchema } from "../schemas/booking/updateBookingSchema.js";
 import workOrderModel from "../models/workorderModel.js";
-import { WO_STATUS_CLOSED } from "../constants/workorderStatus.js";
+import { STATUS_CLOSED } from "../constants/workorderStatus.js";
 import { WO_TYPE_REPAIR } from "../constants/workorderTypes.js";
 import bookingVerificationModel from "../models/bookingVerificationModel.js";
 import { SendVerificationPinSchema } from "../schemas/booking/sendVerificationPinSchema.js";
@@ -203,7 +203,7 @@ export const completeBookingController = async (req, res) => {
 
     const isOpenOrderExists = await workOrderModel.findOne({
       workOrderVehicle: new ObjectId(booking.vehicle),
-      workOrderStatus: { $ne: WO_STATUS_CLOSED },
+      workOrderStatus: { $ne: STATUS_CLOSED },
     });
 
     if (isOpenOrderExists) {

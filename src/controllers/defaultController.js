@@ -3,6 +3,7 @@ import {
   SEQ_GRN,
   SEQ_INVOICE,
   SEQ_PAYMENT,
+  SEQ_RETURN,
 } from "../constants/sequenceConstants.js";
 import accountBalanceModel from "../models/accountBalancemodel.js";
 import sequenceModel from "../models/sequenceModel.js";
@@ -24,6 +25,7 @@ export const addSequencesController = async () => {
     { sequenceType: SEQ_GRN },
     { sequenceType: SEQ_INVOICE },
     { sequenceType: SEQ_PAYMENT },
+    { sequenceType: SEQ_RETURN },
   ]);
 
   console.log("Sequences Created");

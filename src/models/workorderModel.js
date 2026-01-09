@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { WO_STATUS, WO_STATUS_OPEN } from "../constants/workorderStatus.js";
+import { WO_STATUS, STATUS_OPEN } from "../constants/workorderStatus.js";
 import { PAY_STATUS, PAY_STATUS_UNPAID } from "../constants/paymentStatus.js";
 import { WO_TYPES } from "../constants/workorderTypes.js";
 
@@ -149,7 +149,7 @@ const workOrderSchema = new Schema(
     workOrderStatus: {
       type: String,
       enum: WO_STATUS,
-      default: WO_STATUS_OPEN,
+      default: STATUS_OPEN,
     },
     workOrderPaymentStatus: {
       type: String,

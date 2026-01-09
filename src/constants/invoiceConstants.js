@@ -2,3 +2,20 @@ export const INV_CUS_TYP_GUEST = "Walk-In";
 export const INV_CUS_TYP_REGISTERED = "Registered";
 
 export const INV_CUSTOMER_TYPES = [INV_CUS_TYP_GUEST, INV_CUS_TYP_REGISTERED];
+
+export const REFUND_REASON_DEFECTIVE = "Defective";
+export const REFUND_REASON_WRONG_ITEM = "Wrong Item";
+export const REFUND_REASON_CUSTOMER_DISSATISFACTION =
+  "Customer Dissatisfaction";
+export const REFUND_REASON_EXPIRED = "Expired";
+export const REFUND_REASON_DAMAGED = "Damaged";
+export const REFUND_REASON_OTHER = "Other";
+
+export const REFUND_REASONS = [
+  REFUND_REASON_DEFECTIVE,
+  REFUND_REASON_WRONG_ITEM,
+  REFUND_REASON_CUSTOMER_DISSATISFACTION,
+  REFUND_REASON_EXPIRED,
+  REFUND_REASON_DAMAGED,
+  REFUND_REASON_OTHER,
+];
