@@ -28,6 +28,7 @@ import {
   return_quantity_exceeded,
   return_record_expired,
   return_record_not_found,
+  return_window_expired,
   success_message,
 } from "../constants/messageConstants.js";
 import {
@@ -71,6 +72,8 @@ import returnItemModel from "../models/returnItemModel.js";
 import paymentModel from "../models/paymentModel.js";
 import { PAY_SC_CUS_REFUNDS } from "../constants/paymentSource.js";
 import { PAY_METHOD_CASH } from "../constants/paymentMethods.js";
+import { RETURN_WINDOW } from "../constants/constants.js";
+import mongoose from "mongoose";
 
 // Create new invoice controller
 export const createInvoiceController = async (req, res) => {
@@ -828,6 +831,16 @@ export const returnInvoiceItemController = async (req, res) => {
         .json(ApiResponse.error(error_code, invoice_not_found));
     }
 
+    const invoiceDate = new Date(invoice.createdAt);
+    const currentDate = new Date();
+    const daysDifference = (currentDate - invoiceDate) / (1000 * 60 * 60 * 24);
+
+    if (daysDifference > RETURN_WINDOW) {
+      return res
+        .status(httpStatus.BAD_REQUEST)
+        .json(ApiResponse.error(error_code, return_window_expired));
+    }
+
     const existingReturnRecord = await returnModel.findOne({
       returnInvoice: new ObjectId(invoice._id),
     });
@@ -883,6 +896,8 @@ export const returnInvoiceItemController = async (req, res) => {
         returnInvoiceItem: new ObjectId(invoiceItem._id),
         returnInventoryItem: new ObjectId(invoiceItem.item),
         returnOriginalQuantity: invoiceItem.quantity,
+        returnItemBp: invoiceItem.unitBuyingPrice,
+        returnItemSp: invoiceItem.unitPrice,
         returnQuantity: returnQuantity,
         returnItemTotalValue: totalValue,
         returnReason: returnReason,
@@ -1010,7 +1025,7 @@ export const getReturnInvoiceItemsController = async (req, res) => {
 export const processReturnRecordController = async (req, res) => {
   const id = req.query.id;
 
-  if (!id) {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
     return res
       .status(httpStatus.PRECONDITION_FAILED)
       .json(ApiResponse.response(info_code, id_required));

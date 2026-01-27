@@ -15,15 +15,11 @@ import {
   customer_receivables_not,
   customer_registered_successfully,
   existing_customer,
-  existing_vehicle,
   success_message,
 } from "../constants/messageConstants.js";
 import { customerSchema } from "../schemas/customer/customerSchema.js";
-import customerVehicleModel from "../models/customerVehicleModel.js";
 import {
-  formatCurrency,
   formatMobileNumber,
-  formatText,
   isValidString,
 } from "../services/commonServices.js";
 import { customerUpdateSchema } from "../schemas/customer/customerUpdateSchema.js";
@@ -33,10 +29,8 @@ import {
   CONSTANT_SMS,
   NOTIFICATION_SMS,
   NOTIFICATION_TITLE_GREETINGS,
-  NOTIFICATION_TITLE_NOTIF,
   NOTIFICATION_TITLE_OFFERS,
 } from "../constants/constants.js";
-import workOrderModel from "../models/workorderModel.js";
 import notificationModel from "../models/notificationModel.js";
 import invoiceModel from "../models/invoiceModel.js";
 import { INV_CUS_TYP_GUEST } from "../constants/invoiceConstants.js";
@@ -441,53 +435,53 @@ export const sendInvoiceBalanceRemainder = async (req, res) => {
         .json(ApiResponse.error(error_code, customer_not_found));
     }
 
-    const result = await workOrderModel.aggregate([
-      {
-        $match: {
-          workOrderCustomer: new ObjectId(customer._id),
-        },
-      },
-      {
-        $group: {
-          _id: "$workOrderCustomer",
-          totalRevenue: { $sum: "$workOrderTotalAmount" },
-          totalPaid: { $sum: "$workOrderPaidAmount" },
-          totalReceivable: { $sum: "$workOrderBalanceAmount" },
-          workOrderCount: { $sum: 1 },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          totalRevenue: 1,
-          totalPaid: 1,
-          totalReceivable: 1,
-          workOrderCount: 1,
-        },
-      },
-    ]);
+    // const result = await workOrderModel.aggregate([
+    //   {
+    //     $match: {
+    //       workOrderCustomer: new ObjectId(customer._id),
+    //     },
+    //   },
+    //   {
+    //     $group: {
+    //       _id: "$workOrderCustomer",
+    //       totalRevenue: { $sum: "$workOrderTotalAmount" },
+    //       totalPaid: { $sum: "$workOrderPaidAmount" },
+    //       totalReceivable: { $sum: "$workOrderBalanceAmount" },
+    //       workOrderCount: { $sum: 1 },
+    //     },
+    //   },
+    //   {
+    //     $project: {
+    //       _id: 0,
+    //       totalRevenue: 1,
+    //       totalPaid: 1,
+    //       totalReceivable: 1,
+    //       workOrderCount: 1,
+    //     },
+    //   },
+    // ]);
 
-    const totalReceivable = result.length > 0 ? result[0].totalReceivable : 0;
+    // const totalReceivable = result.length > 0 ? result[0].totalReceivable : 0;
 
-    if (totalReceivable <= 0) {
-      return res
-        .status(httpStatus.BAD_REQUEST)
-        .json(ApiResponse.error(error_code, customer_receivables_not));
-    }
+    // if (totalReceivable <= 0) {
+    //   return res
+    //     .status(httpStatus.BAD_REQUEST)
+    //     .json(ApiResponse.error(error_code, customer_receivables_not));
+    // }
 
-    const messageContent = `Hi ${customer.customerPrefix} ${
-      customer.customerName
-    }, your vehicle service/repair payment of ${formatCurrency(
-      totalReceivable
-    )} is pending. Kindly settle at your earliest. Thank you!`;
+    // const messageContent = `Hi ${customer.customerPrefix} ${
+    //   customer.customerName
+    // }, your vehicle service/repair payment of ${formatCurrency(
+    //   totalReceivable
+    // )} is pending. Kindly settle at your earliest. Thank you!`;
 
-    await notificationModel.create({
-      notificationType: NOTIFICATION_SMS,
-      notificationTitle: NOTIFICATION_TITLE_NOTIF,
-      notificationContent: messageContent,
-      notificationCustomer: new ObjectId(customer._id),
-      notificationRecipientCount: 1,
-    });
+    // await notificationModel.create({
+    //   notificationType: NOTIFICATION_SMS,
+    //   notificationTitle: NOTIFICATION_TITLE_NOTIF,
+    //   notificationContent: messageContent,
+    //   notificationCustomer: new ObjectId(customer._id),
+    //   notificationRecipientCount: 1,
+    // });
 
     return res
       .status(httpStatus.OK)
@@ -526,94 +520,6 @@ export const getWalkinCustomersCountController = async (req, res) => {
     return res
       .status(httpStatus.OK)
       .json(ApiResponse.response(success_code, success_message, count));
-  } catch (error) {
-    return res
-      .status(httpStatus.INTERNAL_SERVER_ERROR)
-      .json(ApiResponse.error(error_code, error.message));
-  }
-};
-
-// Stats - New Customers Count this month
-export const getNewCustomersCountController = async (req, res) => {
-  try {
-    const currentDate = new Date();
-    const currentMonth = currentDate.getMonth();
-    const currentYear = currentDate.getFullYear();
-
-    // Current month data
-    const currentMonthStart = new Date(currentYear, currentMonth, 1);
-    const currentMonthEnd = new Date(
-      currentYear,
-      currentMonth + 1,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
-
-    // Previous month data
-    const prevMonthStart = new Date(currentYear, currentMonth - 1, 1);
-    const prevMonthEnd = new Date(
-      currentYear,
-      currentMonth,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
-
-    const [currentMonthData, prevMonthData] = await Promise.all([
-      workOrderModel.aggregate([
-        {
-          $match: {
-            createdAt: { $gte: currentMonthStart, $lte: currentMonthEnd },
-          },
-        },
-        {
-          $group: {
-            _id: "$workOrderCustomer",
-          },
-        },
-        {
-          $count: "newCustomers",
-        },
-      ]),
-      workOrderModel.aggregate([
-        {
-          $match: {
-            createdAt: { $gte: prevMonthStart, $lte: prevMonthEnd },
-          },
-        },
-        {
-          $group: {
-            _id: "$workOrderCustomer",
-          },
-        },
-        {
-          $count: "newCustomers",
-        },
-      ]),
-    ]);
-
-    const currentCount = currentMonthData[0]?.newCustomers || 0;
-    const prevCount = prevMonthData[0]?.newCustomers || 0;
-
-    let percentageChange = 0;
-    if (prevCount > 0) {
-      percentageChange = ((currentCount - prevCount) / prevCount) * 100;
-    } else if (currentCount > 0) {
-      percentageChange = 100;
-    }
-
-    return res.status(httpStatus.OK).json(
-      ApiResponse.response(success_code, success_message, {
-        currentMonthCount: currentCount,
-        previousMonthCount: prevCount,
-        percentageChange: percentageChange.toFixed(2),
-      })
-    );
   } catch (error) {
     return res
       .status(httpStatus.INTERNAL_SERVER_ERROR)

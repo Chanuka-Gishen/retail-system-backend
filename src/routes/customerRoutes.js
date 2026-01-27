@@ -4,7 +4,6 @@ import {
   getAllCustomersController,
   getCustomerInfoController,
   getCustomerSmsNotificationsController,
-  getNewCustomersCountController,
   getWalkinCustomersCountController,
   getSmsNotitificationsController,
   getRegisteredCustomersCountController,
@@ -37,6 +36,5 @@ customerRoutes.get(
   "/auth/stat-repeating-customers",
   getWalkinCustomersCountController
 );
-customerRoutes.get("/auth/stat-new-customers", getNewCustomersCountController);
 
 export default customerRoutes;

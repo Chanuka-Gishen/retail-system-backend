@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import crypto from "crypto";
+
 import { RETURN_STATUS, STATUS_ISSUED } from "../constants/workorderStatus.js";
 
 const Schema = mongoose.Schema;
@@ -9,6 +11,11 @@ const returnSchema = new Schema(
       type: String,
       required: true,
       unique: true,
+    },
+    barcodeFormat: {
+      type: String,
+      enum: ["QR", "CODE128", "EAN13"],
+      default: "CODE128",
     },
     returnInvoice: {
       type: mongoose.Schema.Types.ObjectId,

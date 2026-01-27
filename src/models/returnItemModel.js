@@ -1,5 +1,9 @@
 import mongoose from "mongoose";
 import { REFUND_REASONS } from "../constants/invoiceConstants.js";
+import {
+  RETURN_STS_PENDING,
+  RETURN_STS_PROCESSED,
+} from "../constants/returnStatus.js";
 
 const Schema = mongoose.Schema;
 
@@ -19,6 +23,16 @@ const returnItemSchema = new Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "inventory",
       required: true,
+    },
+    returnItemBp: {
+      type: Number,
+      required: true,
+      min: 0.01,
+    },
+    returnItemSp: {
+      type: Number,
+      required: true,
+      min: 0.01,
     },
     returnOriginalQuantity: {
       type: Number,
@@ -44,6 +58,11 @@ const returnItemSchema = new Schema(
     returnItemTotalValue: {
       type: Number,
       required: true,
+    },
+    returnItemStatus: {
+      type: String,
+      enum: [RETURN_STS_PENDING, RETURN_STS_PROCESSED],
+      default: RETURN_STS_PENDING,
     },
   },
   { timestamps: true }

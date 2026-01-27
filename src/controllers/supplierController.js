@@ -53,7 +53,7 @@ import {
   RETURN_STS,
   RETURN_STS_CANCELED,
   RETURN_STS_PENDING,
-  RETURN_STS_PROCESSES,
+  RETURN_STS_PROCESSED,
 } from "../constants/returnStatus.js";
 import { returnProcessSchema } from "../schemas/grn/returnProcessSchema.js";
 import {
@@ -781,7 +781,7 @@ export const processReturnStockController = async (req, res) => {
     }
 
     record.returnType = returnType;
-    record.returnStatus = RETURN_STS_PROCESSES;
+    record.returnStatus = RETURN_STS_PROCESSED;
     record.returnProcessedBy = new ObjectId(req.user.id);
 
     await record.save();

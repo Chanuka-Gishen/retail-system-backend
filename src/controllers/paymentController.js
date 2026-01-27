@@ -1,8 +1,8 @@
+import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import httpStatus from "http-status";
 import PDFDocument from "pdfkit";
 
-import workOrderModel from "../models/workorderModel.js";
 import ApiResponse from "../services/ApiResponse.js";
 import {
   customer_not_found,
@@ -12,12 +12,14 @@ import {
   payment_already_completed,
   payment_already_processed,
   payment_cannot_delete_generated,
+  payment_cannot_proceed,
   payment_deleted_successfull,
   payment_exceeded_balance,
   payment_record_notfound,
+  return_record_expired,
+  return_record_not_found,
   success_message,
   supplier_not_found,
-  wo_not_found,
 } from "../constants/messageConstants.js";
 import {
   error_code,
@@ -29,7 +31,6 @@ import {
   PAY_STATUS_PAID,
   PAY_STATUS_PARTIALLY_PAID,
   PAY_STATUS_PENDING,
-  PAY_STATUS_REFUNDED,
 } from "../constants/paymentStatus.js";
 import customerModel from "../models/customerModel.js";
 import paymentModel from "../models/paymentModel.js";
@@ -57,6 +58,7 @@ import {
   PAY_METHOD_CHEQUE,
   PAY_METHOD_MOBILE,
   PAY_METHOD_OTHER,
+  PAY_METHOD_REFUND_TICKET,
 } from "../constants/paymentMethods.js";
 import {
   ACC_TYP_BANK,
@@ -66,9 +68,7 @@ import {
 } from "../constants/accountTypes.js";
 import { generateAccountsSummaryReport } from "../services/pdfServices.js";
 import { incomePaymentSchema } from "../schemas/payments/incomePaymentSchema.js";
-import { refundSchema } from "../schemas/grn/refundSchema.js";
-import { STATUS_CLOSED } from "../constants/workorderStatus.js";
-import mongoose from "mongoose";
+
 import { PAY_INPUT_MANUALLY } from "../constants/paymentInputType.js";
 import { grnPaymentSchema } from "../schemas/payments/grnPaymentSchema.js";
 import grnModel from "../models/grnModel.js";
@@ -77,6 +77,9 @@ import { empAdvancePaymentSchema } from "../schemas/payments/empAdvancePaymentSc
 import employeeModel from "../models/employeeModel.js";
 import invoiceModel from "../models/invoiceModel.js";
 import { INV_CUS_TYP_REGISTERED } from "../constants/invoiceConstants.js";
+import returnModel from "../models/returnModel.js";
+import { STATUS_PROCESSED } from "../constants/workorderStatus.js";
+import { STATUS_EXPIRED } from "../constants/constants.js";
 
 // Add payment controller - invoice
 export const createInvoicePaymentController = async (req, res) => {
@@ -92,6 +95,7 @@ export const createInvoicePaymentController = async (req, res) => {
     paymentInvoice,
     paymentAmount,
     paymentMethod,
+    refundCode,
     paymentTransactionId,
     paymentNotes,
   } = value;
@@ -128,7 +132,43 @@ export const createInvoicePaymentController = async (req, res) => {
         .json(ApiResponse.error(info_code, payment_already_completed));
     }
 
-    const balanceAmount = invoice.invoiceBalanceAmount - paymentAmount;
+    let finalPaymentAmount = paymentAmount;
+
+    if (paymentMethod === PAY_METHOD_REFUND_TICKET) {
+      const refundRecord = await returnModel.findOne({
+        returnCode: `RTN${refundCode.toUpperCase()}`,
+      });
+
+      if (!refundRecord) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json(ApiResponse.error(error_code, return_record_not_found));
+      }
+
+      const today = new Date();
+
+      if (today > refundRecord.returnExpiresAt) {
+        refundRecord.returnStatus = STATUS_EXPIRED;
+
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json(ApiResponse.response(info_code, return_record_expired));
+      }
+
+      if (invoice.invoiceSubTotal < refundRecord.returnTotalValue) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json(ApiResponse.response(info_code, payment_cannot_proceed));
+      }
+
+      refundRecord.returnStatus = STATUS_PROCESSED;
+      refundRecord.returnProcessedBy = new ObjectId(req.user.id);
+      await refundRecord.save();
+
+      finalPaymentAmount = refundRecord.returnTotalValue;
+    }
+
+    const balanceAmount = invoice.invoiceBalanceAmount - finalPaymentAmount;
 
     if (balanceAmount < 0) {
       return res
@@ -150,7 +190,7 @@ export const createInvoicePaymentController = async (req, res) => {
         ? paymentNotes
         : "Customer invoice payments " + invoice.invoiceNumber,
       paymentMethod,
-      paymentAmount,
+      paymentAmount: finalPaymentAmount,
       paymentTransactionId,
     });
 
@@ -168,9 +208,12 @@ export const createInvoicePaymentController = async (req, res) => {
     }
 
     if (
-      [PAY_METHOD_CASH, PAY_METHOD_MOBILE, PAY_METHOD_OTHER].includes(
-        savedPayment.paymentMethod
-      )
+      [
+        PAY_METHOD_CASH,
+        PAY_METHOD_MOBILE,
+        PAY_METHOD_OTHER,
+        PAY_METHOD_REFUND_TICKET,
+      ].includes(savedPayment.paymentMethod)
     ) {
       await updateAccountData(
         ACC_TYP_CASH,
@@ -496,82 +539,6 @@ export const createIncomePaymentController = async (req, res) => {
     return res
       .status(httpStatus.OK)
       .json(ApiResponse.response(success_code, success_message));
-  } catch (error) {
-    return res
-      .status(httpStatus.INTERNAL_SERVER_ERROR)
-      .json(ApiResponse.error(error_code, error.message));
-  }
-};
-
-// TODO Create refund record -- REFACTOR
-export const createRefundPaymentController = async (req, res) => {
-  const { error, value } = refundSchema.validate(req.body);
-
-  if (error) {
-    return res
-      .status(httpStatus.BAD_REQUEST)
-      .json(ApiResponse.error(error_code, error.message));
-  }
-  try {
-    const workorder = await workOrderModel.findById(new ObjectId(value._id));
-
-    if (!workorder) {
-      return res
-        .status(httpStatus.BAD_REQUEST)
-        .json(ApiResponse.error(error_code, wo_not_found));
-    }
-
-    if (workorder.workOrderPaidAmount > 0) {
-      const newPayment = new paymentModel({
-        paymentworkOrder: new ObjectId(value._id),
-        paymentCustomer: new ObjectId(workorder.workOrderCustomer),
-        paymentCollectedBy: new ObjectId(req.user.id),
-        paymentType: PAYMENT_TYPE_OUT,
-        paymentAmount: workorder.workOrderPaidAmount,
-        paymentSource: PAY_SC_CUS_REFUNDS,
-        paymentMethod: value.paymentMethod,
-        paymentTransactionId: value.paymentTransactionId,
-        paymentNotes: value.paymentNotes,
-        createdAt: value.paymentDate,
-      });
-
-      await newPayment.save();
-    }
-
-    workorder.workOrderPaymentStatus = PAY_STATUS_REFUNDED;
-    workorder.workOrderStatus = STATUS_CLOSED;
-
-    const savedWorkorder = await workorder.save();
-
-    if ([PAY_METHOD_CASH].includes(value.paymentMethod)) {
-      await updateAccountData(
-        ACC_TYP_CASH,
-        PAYMENT_TYPE_OUT,
-        workorder.workOrderPaidAmount
-      );
-    }
-
-    if (
-      [PAY_METHOD_BACK_TRN, PAY_METHOD_CARD, PAY_METHOD_CHEQUE].includes(
-        value.paymentMethod
-      )
-    ) {
-      await updateAccountData(
-        ACC_TYP_BANK,
-        PAYMENT_TYPE_OUT,
-        workorder.workOrderPaidAmount
-      );
-    }
-
-    await updateAccountData(
-      ACC_TYP_PAYABLES,
-      PAYMENT_TYPE_OUT,
-      savedWorkorder.workOrderBalanceAmount
-    );
-
-    return res
-      .status(httpStatus.OK)
-      .json(ApiResponse.response(success_code, success_code));
   } catch (error) {
     return res
       .status(httpStatus.INTERNAL_SERVER_ERROR)

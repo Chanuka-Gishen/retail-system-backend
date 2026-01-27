@@ -53,3 +53,5 @@ export const STATUS_VERIFICATION = [
   STATUS_VERIFIED,
   STATUS_FAILED,
 ];
+
+export const RETURN_WINDOW = 7; // Days

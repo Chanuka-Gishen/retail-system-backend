@@ -1,3 +1,5 @@
+import { RETURN_WINDOW } from "./constants.js";
+
 export const server_default_message = "WIJAYA AUTO SERVER";
 
 export const access_denied = "Access Denied";
@@ -62,6 +64,7 @@ export const invoice_cannot_close_not_completed =
 
 export const return_quantity_exceeded =
   "Cannot return more than the purchased quantity";
+export const return_window_expired = `Cannot return items after ${RETURN_WINDOW} days.`;
 
 export const wo_not_found = "Workorder not found";
 export const wo_invalid_status = "Invalid status";
@@ -80,6 +83,7 @@ export const payment_already_processed = "Payment already processed";
 export const payment_cannot_delete_generated =
   "Cannot delete generated records";
 export const payment_deleted_successfull = "Deleted Successful";
+export const payment_cannot_proceed = "Payment cannot proceed";
 
 export const emp_exists = "Employee NIC already registered";
 export const emp_id_exists = "Employee ID already assigned";

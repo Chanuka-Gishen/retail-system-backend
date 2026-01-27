@@ -4,7 +4,6 @@ import {
   createExpensesPaymentController,
   createGrnPaymentRecordController,
   createIncomePaymentController,
-  createRefundPaymentController,
   createInvoicePaymentController,
   deletePaymentRecordController,
   deleteInvoicePaymentController,
@@ -39,7 +38,6 @@ paymentRoutes.delete(
 paymentRoutes.post("/auth/add-expenses", createExpensesPaymentController);
 paymentRoutes.delete("/supAuth/delete-payment", deletePaymentRecordController);
 paymentRoutes.post("/auth/add-income", createIncomePaymentController);
-paymentRoutes.post("/supAuth/refund-payment", createRefundPaymentController);
 paymentRoutes.post("/auth/grn-payment", createGrnPaymentRecordController);
 paymentRoutes.post("/auth/add-emp-payment", createEmpAdvancePaymentsController);
 paymentRoutes.get("/auth/grn-payments", getGrnPaymentRecordsController);

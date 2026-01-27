@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import crypto from "crypto";
 
 import {
   ITEM_STATUS,
@@ -12,11 +13,28 @@ const Schema = mongoose.Schema;
 const inventorySchema = new Schema(
   {
     itemCode: { type: String, required: true, unique: true },
+    itemBarCode: {
+      type: String,
+      index: true,
+      required: true,
+      default: () => crypto.randomBytes(16).toString("hex"),
+      validate: {
+        validator: function (v) {
+          return /^[A-Za-z0-9_-]{16,64}$/.test(v); // Secure token format
+        },
+        message: "Invalid barcode token format",
+      },
+    },
     itemName: { type: String, required: true },
     itemCategory: {
       type: Schema.Types.ObjectId,
       ref: "inventoryCategory",
       required: true,
+    },
+    itemBrand: {
+      type: Schema.Types.ObjectId,
+      ref: "brand",
+      default: null,
     },
     itemDescription: { type: String, default: "" },
     itemBpChangeMargin: { type: Number, default: 0 },
